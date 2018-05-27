@@ -2,6 +2,8 @@
 
 from requests_html import HTMLSession
 from sys import exit, argv
+from multiprocessing import Pool
+
 
 preference_order = ['mobi', 'epub', 'pdf']
 
@@ -89,18 +91,24 @@ def print_summary(ebooks):
     pass
 
 
-def save_to_disk(session, ebooks):
-    len_ebooks = len(ebooks)
-    i = 0
+def download_ebook(session, ebook, i, total):
+    print('Downloading {}/{}\t{}...'.format(i, total, ebook['name']))
+    r = session.get(ebook['url'])
+    with open(ebook['name'] + '.' + ebook['type'], 'wb') as fd:
+        for chunk in r.iter_content(chunk_size=2048):
+            fd.write(chunk)
 
-    # TODO: Add some parallelization here
-    for ebook in ebooks:
-        i += 1
-        print('Downloading {}/{}\t{}...'.format(i, len_ebooks, ebook['name']))
-        r = session.get(ebook['url'])
-        with open(ebook['name'] + '.' + ebook['type'], 'wb') as fd:
-            for chunk in r.iter_content(chunk_size=2048):
-                fd.write(chunk)
+
+def download(session, ebooks):
+    len_ebooks = len(ebooks)
+    download_count = 0
+
+    with Pool(3) as pool:
+        for ebook in ebooks:
+            download_count += 1
+            pool.apply_async(download_ebook, args=(session, ebook, download_count, len_ebooks))
+        pool.close()
+        pool.join()
 
 
 def main():
@@ -108,7 +116,7 @@ def main():
     session = create_session(cookie)
     ebooks = list(fetch_books(session))
     print_summary(ebooks)
-    save_to_disk(session, ebooks)
+    download(session, ebooks)
     print('Done :)')
 
 
